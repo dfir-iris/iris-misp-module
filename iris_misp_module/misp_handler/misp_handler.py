@@ -19,6 +19,8 @@
 import json
 import traceback
 
+from iris_interface import IrisInterfaceStatus
+
 from iris_misp_module.misp_handler.mispclient import MISPClient, MISPClientError
 
 from iris_interface.IrisModuleInterface import IrisPipelineTypes, IrisModuleInterface, IrisModuleTypes
@@ -26,34 +28,59 @@ import iris_interface.IrisInterfaceStatus as InterfaceStatus
 from app.datamgmt.manage.manage_attribute_db import add_tab_attribute_field
 
 
-class MispHandler():
+class MispHandler:
     def __init__(self, mod_config, logger):
         self.mod_config = mod_config
         self.http_proxy = self.mod_config.get('misp_http_proxy')
         self.https_proxy = self.mod_config.get('misp_https_proxy')
-        self.misp = self.get_misp_instance()
+        self.misp = None
         self.log = logger
 
-    def get_misp_instance(self):
-        """
-        """
+    def _load_misp_config(self):
         try:
             misp_config = json.loads(self.mod_config.get('misp_config'))
+            return misp_config
         except json.JSONDecodeError as e:
             self.log.error(f"Error parsing MISP configuration: {e}")
             return None
 
+    def load_misp_instance(self):
+        """
+        Initiates MISP(s) instance communication
+        :returns MISPClient object
+        """
+
+        misp_config = self._load_misp_config()
+        if misp_config is None:
+            return None
+
         try:
 
-            return MISPClient(url=misp_config.get('config.url', None, 'No MISP url given.'),
-                              key=misp_config.get('config.key', None, 'No MISP api key given.'),
-                              ssl=misp_config.get('config.ssl', None, 'No MISP ssl given.'),
-                              name=misp_config.get('config.name', None, 'No MISP name given.'),
-                              proxies={'http': self.http_proxy, 'https': self.https_proxy})
+            self.misp = {
+                'type': misp_config.get('type', 'public'),
+                'misp': MISPClient(url=misp_config.get('url', None),
+                                   key=misp_config.get('key', None),
+                                   ssl=misp_config.get('ssl', None),
+                                   name=misp_config.get('name', None),
+                                   proxies={'http': self.http_proxy, 'https': self.https_proxy})
+            }
+
+            return self.misp
         except MISPClientError as e:
             self.log.error(f"MISPClient Error initiating MISP instances {e}")
+            return None
         except TypeError as te:
             self.log.error(f"Type Error initiating MISP instances {te}")
+            return None
+
+    def get_misp_instance(self):
+        if len(self.misp) == 0:
+            self.misp = self.load_misp_instance()
+
+        return self.misp
+
+    def gen_domain_report_from_template(self, html_template, misp_report):
+        return IrisInterfaceStatus.I2Success(data=rendered)
 
     def handle_misp_domain(self, ioc):
         """
@@ -66,6 +93,28 @@ class MispHandler():
         self.log.info(f'Getting domain report for {ioc.ioc_value}')
         report = self.misp.search_domain(ioc.ioc_value)
 
+        if self.mod_config.get('misp_report_as_attribute') is True:
+            self.log.info('Adding new attribute MISP Domain Report to IOC')
+
+            status = self.gen_domain_report_from_template(
+                html_template=self.mod_config.get('misp_domain_report_template'),
+                misp_report=report)
+
+            if not status.is_success():
+                return status
+
+            rendered_report = status.get_data()
+
+            try:
+                add_tab_attribute_field(ioc, tab_name='MISP Report', field_name="HTML report", field_type="html",
+                                        field_value=rendered_report)
+
+            except Exception:
+
+                self.log.error(traceback.format_exc())
+                return InterfaceStatus.I2Error(traceback.format_exc())
+        else:
+            self.log.info('Skipped adding attribute report. Option disabled')
 
         return InterfaceStatus.I2Success()
 
@@ -82,7 +131,6 @@ class MispHandler():
 
         status = self._validate_report(report)
 
-
         return InterfaceStatus.I2Success("Successfully processed IP")
 
     def handle_misp_hash(self, ioc):
@@ -95,6 +143,5 @@ class MispHandler():
 
         self.log.info(f'Getting hash report for {ioc.ioc_value}')
         report = self.misp.search_hash(ioc.ioc_value)
-
 
         return InterfaceStatus.I2Success("Successfully processed hash")
