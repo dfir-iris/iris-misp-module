@@ -18,6 +18,8 @@
 #  Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 import json
 import traceback
+import logging as log
+from jinja2 import Template
 
 from iris_interface import IrisInterfaceStatus
 
@@ -79,7 +81,32 @@ class MispHandler:
 
         return self.misp
 
-    def gen_domain_report_from_template(self, html_template, misp_report):
+    def gen_domain_report_from_template(self, html_template, misp_report) -> IrisInterfaceStatus:
+        """
+        Generates an HTML report for IP, displayed as an attribute in the IOC
+
+        :param html_template: A string representing the HTML template
+        :param misp_report: The JSON report fetched with VT API
+        :return: IrisInterfaceStatus
+        """
+        template = Template(html_template)
+        context = misp_report
+        pre_render = dict({"results": []})
+
+        # misp_results == dict({"name", "results", "url"})
+        for misp_result in context:
+            pre_render["results"].append(misp_result)
+
+        try:
+
+            rendered = template.render(pre_render)
+            print(rendered)
+
+        except Exception:
+            print(traceback.format_exc())
+            log.error(traceback.format_exc())
+            return IrisInterfaceStatus.I2Error(traceback.format_exc())
+
         return IrisInterfaceStatus.I2Success(data=rendered)
 
     def handle_misp_domain(self, ioc):
@@ -91,7 +118,7 @@ class MispHandler:
         """
 
         self.log.info(f'Getting domain report for {ioc.ioc_value}')
-        report = self.misp.search_domain(ioc.ioc_value)
+        report = self.misp.get("misp").search_domain(ioc.ioc_value)
 
         if self.mod_config.get('misp_report_as_attribute') is True:
             self.log.info('Adding new attribute MISP Domain Report to IOC')
