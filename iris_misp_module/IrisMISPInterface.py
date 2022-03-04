@@ -82,11 +82,12 @@ class IrisMISPInterface(IrisModuleInterface):
         else:
             self.deregister_from_hook(module_id=self.module_id, iris_hook_name='on_manual_trigger_ioc')
 
-    def hooks_handler(self, hook_name: str, data):
+    def hooks_handler(self, hook_name: str, hook_ui_name: str, data: any):
         """
         Hooks handler table. Calls corresponding methods depending on the hooks name.
 
         :param hook_name: Name of the hook which triggered
+        :param hook_ui_name: Name of the ui hook
         :param data: Data associated with the trigger.
         :return: Data
         """
