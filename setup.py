@@ -18,7 +18,6 @@ setup(
         "setuptools",
         "celery~=4.4.7",
         "pyunpack",
-        "iris_interface==1.1",
         "pymisp~=2.4.152",
         "Jinja2~=3.0.3"
     ]
