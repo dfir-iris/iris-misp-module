@@ -119,6 +119,7 @@ class IrisMISPInterface(IrisModuleInterface):
         """
 
         misp_handler = MispHandler(mod_config=self._dict_conf, logger=self.log)
+        misp_handler.load_misp_instance()
         in_status = InterfaceStatus.IIStatus(code=InterfaceStatus.I2CodeNoError)
 
         for element in data:
