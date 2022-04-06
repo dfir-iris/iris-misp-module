@@ -16,9 +16,7 @@ setup(
     ],
     install_requires=[
         "setuptools",
-        "celery~=4.4.7",
         "pyunpack",
-        "pymisp~=2.4.152",
-        "Jinja2~=3.0.3"
+        "pymisp~=2.4.152"
     ]
 )
