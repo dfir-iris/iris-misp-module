@@ -210,7 +210,7 @@ class MispHandler:
         """
 
         self.log.info(f'Getting IP report for {ioc.ioc_value}')
-        report = self.misp.search_ip(ioc.ioc_value)
+        report = self.misp.get("misp").search_ip(ioc.ioc_value)
 
         if self.mod_config.get('misp_report_as_attribute') is True:
             self.log.info('Adding new attribute MISP IP Report to IOC')
@@ -246,7 +246,7 @@ class MispHandler:
         """
 
         self.log.info(f'Getting hash report for {ioc.ioc_value}')
-        report = self.misp.search_hash(ioc.ioc_value)
+        report = self.misp.get("misp").search_hash(ioc.ioc_value)
 
         if self.mod_config.get('misp_report_as_attribute') is True:
             self.log.info('Adding new attribute MISP IP Report to IOC')
