@@ -163,5 +163,32 @@ module_configuration = [
         "mandatory": False,
         "type": "textfield_html",
         "section": "Templates"
+    },
+    {
+        "param_name": "misp_manual_hook_enabled",
+        "param_human_name": "Manual triggers on IOCs",
+        "param_description": "Set to True to offers possibility to manually triggers the module via the UI",
+        "default": True,
+        "mandatory": True,
+        "type": "bool",
+        "section": "Triggers"
+    },
+    {
+        "param_name": "misp_on_create_hook_enabled",
+        "param_human_name": "Triggers automatically on IOC create",
+        "param_description": "Set to True to automatically add a MISP insight each time an IOC is created",
+        "default": False,
+        "mandatory": True,
+        "type": "bool",
+        "section": "Triggers"
+    },
+    {
+        "param_name": "misp_on_update_hook_enabled",
+        "param_human_name": "Triggers automatically on IOC update",
+        "param_description": "Set to True to automatically add a MISP insight each time an IOC is updated",
+        "default": False,
+        "mandatory": True,
+        "type": "bool",
+        "section": "Triggers"
     }
 ]
