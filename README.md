@@ -7,7 +7,7 @@ An interface module for MISP and Iris to automatically enrich IOCs with MISP ins
 The module is preinstalled and registered by default on IRIS. For a manual installation please see the Installation section of this readme.
 
 ## Configuration 
-Please refer to the [IRIS documentation](https://dfir-iris.github.io/operations/modules/natives/IrisMISP/). 
+Please refer to the [IRIS documentation](https://docs.dfir-iris.org/operations/modules/natives/IrisMISP/). 
 
 ## Installation 
  The installation can however be done manually if required, 
