@@ -124,7 +124,13 @@ class IrisMISPInterface(IrisModuleInterface):
 
         for element in data:
             # Check that the IOC we receive is of type the module can handle and dispatch
-            if 'ip-' in element.ioc_type.type_name:
+            if 'domain|ip' == element.ioc_type.type_name:
+                status = misp_handler.handle_misp_domain_ip(ioc=element)
+                in_status = InterfaceStatus.merge_status(in_status, status)
+            elif element.ioc_type.type_name.startswith('ip'):
+                if element.ioc_type.type_name.endswith('|port'):
+                    ip, _ = element.ioc_value.split('|')
+                    element.ioc_value = ip
                 status = misp_handler.handle_misp_ip(ioc=element)
                 in_status = InterfaceStatus.merge_status(in_status, status)
 
@@ -132,7 +138,16 @@ class IrisMISPInterface(IrisModuleInterface):
                 status = misp_handler.handle_misp_domain(ioc=element)
                 in_status = InterfaceStatus.merge_status(in_status, status)
 
-            elif element.ioc_type.type_name in ['md5', 'sha224', 'sha256', 'sha512']:
+            elif element.ioc_type.type_name == 'ja3-fingerprint-md5':
+                status = misp_handler.handle_misp_ja3(ioc=element)
+                in_status = InterfaceStatus.merge_status(in_status, status)
+
+            elif element.ioc_type.type_name in ['md5', 'sha1', 'sha256', 'ssdeep', 'sha224', 'sha384', 'sha512', 'sha512/224', 'sha512/256', 'tlsh', 'authentihash']:
+                status = misp_handler.handle_misp_hash(ioc=element)
+                in_status = InterfaceStatus.merge_status(in_status, status)
+            elif element.ioc_type.type_name.startswith('filename|'):
+                _, hash = element.ioc_value.split('|')
+                element.ioc_value = hash
                 status = misp_handler.handle_misp_hash(ioc=element)
                 in_status = InterfaceStatus.merge_status(in_status, status)
 

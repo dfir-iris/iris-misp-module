@@ -150,6 +150,15 @@ class MISPClient:
                 'filename|sha384', 'filename|sha512', 'filename|sha512/224', 'filename|sha512/256', 'filename|tlsh',
                 'filename|authentihash']
 
+    @staticmethod
+    def _mispja3types():
+        """Just for better readability, all __misp*type methods return just a list of misp data types
+
+        :returns: data types containing JA3
+        :rtype: list
+        """
+        return ['ja3-fingerprint-md5']
+
     def __clean_relatedevent(self, related_events):
         """
         Strip relatedevent sub content of event for lighter output.
@@ -294,6 +303,14 @@ class MISPClient:
         :rtype: list
         """
         return self.__search(type_attribute=self.__mispfilenametypes(), value=searchterm)
+
+    def search_ja3(self, searchterm):
+        """Search for JA3
+        
+        :type searchterm: str
+        :rtype: list
+        """
+        return self.__search(type_attribute=self._mispja3types(), value=searchterm)
 
     def searchall(self, searchterm):
         """Search through all attribute types, this could be really slow.

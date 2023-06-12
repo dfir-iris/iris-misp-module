@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='iris_misp_module',
-    version='1.2.0',
+    version='1.3.0',
     packages=['iris_misp_module', 'iris_misp_module.misp_handler'],
     url='https://github.com/dfir-iris/iris-misp-module',
     license='LGPLv3.0',
@@ -17,6 +17,6 @@ setup(
     install_requires=[
         "setuptools",
         "pyunpack",
-        "pymisp~=2.4.152"
+        "pymisp~=2.4.172"
     ]
 )

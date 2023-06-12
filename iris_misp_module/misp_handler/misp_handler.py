@@ -272,3 +272,81 @@ class MispHandler:
             self.log.info('Skipped adding attribute report. Option disabled')
 
         return InterfaceStatus.I2Success("Successfully processed hash")
+
+    def handle_misp_domain_ip(self, ioc):
+        """
+        Handles an IOC of type domain|ip and adds MISP insights
+
+        :param ioc: IOC instance
+        :return: IIStatus
+        """
+
+        self.log.info(f'Getting domain|ip report for {ioc.ioc_value}')
+        domain, ip = ioc.ioc_value.split('|')
+        domain_report = self.misp.get("misp").search_domain(domain)
+        ip_report = self.misp.get("misp").search_domain(ip)
+
+        if self.mod_config.get('misp_report_as_attribute') is True:
+            self.log.info('Adding new attribute MISP Domain Report to IOC')
+
+            domain_status = self.gen_domain_report_from_template(
+                html_template=self.mod_config.get('misp_domain_report_template'),
+                misp_report=domain_report)
+            ip_status = self.gen_ip_report_from_template(
+                html_template=self.mod_config.get('misp_domain_report_template'),
+                misp_report=ip_report)
+
+            if not (domain_status.is_success() and ip_status.is_success()):
+                return domain_status
+
+            domain_rendered_report = domain_status.get_data()
+            ip_rendered_report = ip_status.get_data()
+
+            try:
+                add_tab_attribute_field(ioc, tab_name='MISP Report', field_name="HTML report", field_type="html",
+                                        field_value=domain_rendered_report+'<br/>'+ip_rendered_report)
+
+            except Exception:
+
+                self.log.error(traceback.format_exc())
+                return InterfaceStatus.I2Error(traceback.format_exc())
+        else:
+            self.log.info('Skipped adding attribute report. Option disabled')
+
+        return InterfaceStatus.I2Success()
+    
+    def handle_misp_ja3(self, ioc):
+        """
+        Handles an IOC of type JA3 and adds MISP insights
+
+        :param ioc: IOC instance
+        :return: IIStatus
+        """
+
+        self.log.info(f'Getting JA3 report for {ioc.ioc_value}')
+        report = self.misp.get("misp").search_ja3(ioc.ioc_value)
+
+        if self.mod_config.get('misp_report_as_attribute') is True:
+            self.log.info('Adding new attribute MISP JA3 Report to IOC')
+
+            status = self.gen_domain_report_from_template(
+                html_template=self.mod_config.get('misp_ja3_report_template'),
+                misp_report=report)
+
+            if not status.is_success():
+                return status
+
+            rendered_report = status.get_data()
+
+            try:
+                add_tab_attribute_field(ioc, tab_name='MISP Report', field_name="HTML report", field_type="html",
+                                        field_value=rendered_report)
+
+            except Exception:
+
+                self.log.error(traceback.format_exc())
+                return InterfaceStatus.I2Error(traceback.format_exc())
+        else:
+            self.log.info('Skipped adding attribute report. Option disabled')
+
+        return InterfaceStatus.I2Success()
