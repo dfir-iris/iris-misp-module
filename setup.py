@@ -17,6 +17,6 @@ setup(
     install_requires=[
         "setuptools",
         "pyunpack",
-        "pymisp~=2.4.172"
+        "pymisp==2.4.172"
     ]
 )
