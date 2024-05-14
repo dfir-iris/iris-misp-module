@@ -17,17 +17,15 @@
 #  along with this program; if not, write to the Free Software Foundation,
 #  Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 import json
-import traceback
 import logging as log
-from jinja2 import Template
+import traceback
 
-from iris_interface import IrisInterfaceStatus
-
-from iris_misp_module.misp_handler.mispclient import MISPClient, MISPClientError
-
-from iris_interface.IrisModuleInterface import IrisPipelineTypes, IrisModuleInterface, IrisModuleTypes
 import iris_interface.IrisInterfaceStatus as InterfaceStatus
 from app.datamgmt.manage.manage_attribute_db import add_tab_attribute_field
+from iris_interface import IrisInterfaceStatus
+from jinja2 import Template
+
+from iris_misp_module.misp_handler.mispclient import MISPClient, MISPClientError
 
 
 class MispHandler:
@@ -81,7 +79,7 @@ class MispHandler:
 
         return self.misp
 
-    def gen_domain_report_from_template(self, html_template, misp_report) -> IrisInterfaceStatus:
+    def gen_report_from_template(self, html_template, misp_report) -> IrisInterfaceStatus:
         """
         Generates an HTML report for Domain, displayed as an attribute in the IOC
 
@@ -98,9 +96,7 @@ class MispHandler:
             pre_render["results"].append(misp_result)
 
         try:
-
             rendered = template.render(pre_render)
-            print(rendered)
 
         except Exception:
             print(traceback.format_exc())
@@ -109,61 +105,42 @@ class MispHandler:
 
         return IrisInterfaceStatus.I2Success(data=rendered)
 
-    def gen_ip_report_from_template(self, html_template, misp_report) -> IrisInterfaceStatus:
+    def _handle_misp_report(self, ioc, report, html_report_template):
         """
-        Generates an HTML report for IP, displayed as an attribute in the IOC
-
-        :param html_template: A string representing the HTML template
-        :param misp_report: The JSON report fetched with MISP API
-        :return: IrisInterfaceStatus
+        Handle the MISP report response, adds the report as attribute and attaches a tag on hit
         """
-        template = Template(html_template)
-        context = misp_report
-        pre_render = dict({"results": []})
 
-        # misp_results == dict({"name", "results", "url"})
-        for misp_result in context:
-            pre_render["results"].append(misp_result)
+        if self.mod_config.get('misp_report_as_attribute') is True:
+            self.log.info('Adding new attribute MISP Report to IOC')
 
-        try:
+            status = self.gen_report_from_template(
+                html_template=html_report_template,
+                misp_report=report)
 
-            rendered = template.render(pre_render)
-            print(rendered)
+            if not status.is_success():
+                return status
 
-        except Exception:
-            print(traceback.format_exc())
-            log.error(traceback.format_exc())
-            return IrisInterfaceStatus.I2Error(traceback.format_exc())
+            rendered_report = status.get_data()
 
-        return IrisInterfaceStatus.I2Success(data=rendered)
+            try:
+                add_tab_attribute_field(ioc, tab_name='MISP Report', field_name="HTML report", field_type="html",
+                                        field_value=rendered_report)
 
-    def gen_hash_report_from_template(self, html_template, misp_report) -> IrisInterfaceStatus:
-        """
-        Generates an HTML report for Hash, displayed as an attribute in the IOC
+            except Exception:
+                self.log.error(traceback.format_exc())
+                return InterfaceStatus.I2Error(traceback.format_exc())
+        else:
+            self.log.info('Skipped adding attribute report. Option disabled')
 
-        :param html_template: A string representing the HTML template
-        :param misp_report: The JSON report fetched with VT API
-        :return: IrisInterfaceStatus
-        """
-        template = Template(html_template)
-        context = misp_report
-        pre_render = dict({"results": []})
+        # Check if we have any hits, and add/remove tag
+        hits = [r for r in report if r.get('result')]
+        if len(hits) > 0:
+            if "misp:hit" not in ioc.ioc_tags:
+                ioc.ioc_tags = f"{ioc.ioc_tags},misp:hit"
+        else:
+            ioc.ioc_tags = ioc.ioc_tags.replace("misp:hit", "")
 
-        # misp_results == dict({"name", "results", "url"})
-        for misp_result in context:
-            pre_render["results"].append(misp_result)
-
-        try:
-
-            rendered = template.render(pre_render)
-            print(rendered)
-
-        except Exception:
-            print(traceback.format_exc())
-            log.error(traceback.format_exc())
-            return IrisInterfaceStatus.I2Error(traceback.format_exc())
-
-        return IrisInterfaceStatus.I2Success(data=rendered)
+        return InterfaceStatus.I2Success("Successfully processed IOC")
 
     def handle_misp_domain(self, ioc):
         """
@@ -176,30 +153,7 @@ class MispHandler:
         self.log.info(f'Getting domain report for {ioc.ioc_value}')
         report = self.misp.get("misp").search_domain(ioc.ioc_value)
 
-        if self.mod_config.get('misp_report_as_attribute') is True:
-            self.log.info('Adding new attribute MISP Domain Report to IOC')
-
-            status = self.gen_domain_report_from_template(
-                html_template=self.mod_config.get('misp_domain_report_template'),
-                misp_report=report)
-
-            if not status.is_success():
-                return status
-
-            rendered_report = status.get_data()
-
-            try:
-                add_tab_attribute_field(ioc, tab_name='MISP Report', field_name="HTML report", field_type="html",
-                                        field_value=rendered_report)
-
-            except Exception:
-
-                self.log.error(traceback.format_exc())
-                return InterfaceStatus.I2Error(traceback.format_exc())
-        else:
-            self.log.info('Skipped adding attribute report. Option disabled')
-
-        return InterfaceStatus.I2Success()
+        return self._handle_misp_report(ioc, report, self.mod_config.get('misp_domain_report_template'))
 
     def handle_misp_ip(self, ioc):
         """
@@ -212,30 +166,7 @@ class MispHandler:
         self.log.info(f'Getting IP report for {ioc.ioc_value}')
         report = self.misp.get("misp").search_ip(ioc.ioc_value)
 
-        if self.mod_config.get('misp_report_as_attribute') is True:
-            self.log.info('Adding new attribute MISP IP Report to IOC')
-
-            status = self.gen_ip_report_from_template(
-                html_template=self.mod_config.get('misp_ip_report_template'),
-                misp_report=report)
-
-            if not status.is_success():
-                return status
-
-            rendered_report = status.get_data()
-
-            try:
-                add_tab_attribute_field(ioc, tab_name='MISP Report', field_name="HTML report", field_type="html",
-                                        field_value=rendered_report)
-
-            except Exception:
-
-                self.log.error(traceback.format_exc())
-                return InterfaceStatus.I2Error(traceback.format_exc())
-        else:
-            self.log.info('Skipped adding attribute report. Option disabled')
-
-        return InterfaceStatus.I2Success("Successfully processed IP")
+        return self._handle_misp_report(ioc, report, self.mod_config.get('misp_ip_report_template'))
 
     def handle_misp_hash(self, ioc):
         """
@@ -248,30 +179,7 @@ class MispHandler:
         self.log.info(f'Getting hash report for {ioc.ioc_value}')
         report = self.misp.get("misp").search_hash(ioc.ioc_value)
 
-        if self.mod_config.get('misp_report_as_attribute') is True:
-            self.log.info('Adding new attribute MISP IP Report to IOC')
-
-            status = self.gen_hash_report_from_template(
-                html_template=self.mod_config.get('misp_hash_report_template'),
-                misp_report=report)
-
-            if not status.is_success():
-                return status
-
-            rendered_report = status.get_data()
-
-            try:
-                add_tab_attribute_field(ioc, tab_name='MISP Report', field_name="HTML report", field_type="html",
-                                        field_value=rendered_report)
-
-            except Exception:
-
-                self.log.error(traceback.format_exc())
-                return InterfaceStatus.I2Error(traceback.format_exc())
-        else:
-            self.log.info('Skipped adding attribute report. Option disabled')
-
-        return InterfaceStatus.I2Success("Successfully processed hash")
+        return self._handle_misp_report(ioc, report, self.mod_config.get('misp_hash_report_template'))
 
     def handle_misp_domain_ip(self, ioc):
         """
@@ -286,35 +194,14 @@ class MispHandler:
         domain_report = self.misp.get("misp").search_domain(domain)
         ip_report = self.misp.get("misp").search_domain(ip)
 
-        if self.mod_config.get('misp_report_as_attribute') is True:
-            self.log.info('Adding new attribute MISP Domain Report to IOC')
+        domain_result = self._handle_misp_report(ioc, domain_report, self.mod_config.get('misp_domain_report_template'))
+        if not domain_result.is_success():
+            return domain_result
 
-            domain_status = self.gen_domain_report_from_template(
-                html_template=self.mod_config.get('misp_domain_report_template'),
-                misp_report=domain_report)
-            ip_status = self.gen_ip_report_from_template(
-                html_template=self.mod_config.get('misp_domain_report_template'),
-                misp_report=ip_report)
+        ip_result = self._handle_misp_report(ioc, ip_report, self.mod_config.get('misp_ip_report_template'))
 
-            if not (domain_status.is_success() and ip_status.is_success()):
-                return domain_status
+        return ip_result
 
-            domain_rendered_report = domain_status.get_data()
-            ip_rendered_report = ip_status.get_data()
-
-            try:
-                add_tab_attribute_field(ioc, tab_name='MISP Report', field_name="HTML report", field_type="html",
-                                        field_value=domain_rendered_report+'<br/>'+ip_rendered_report)
-
-            except Exception:
-
-                self.log.error(traceback.format_exc())
-                return InterfaceStatus.I2Error(traceback.format_exc())
-        else:
-            self.log.info('Skipped adding attribute report. Option disabled')
-
-        return InterfaceStatus.I2Success()
-    
     def handle_misp_ja3(self, ioc):
         """
         Handles an IOC of type JA3 and adds MISP insights
@@ -326,27 +213,4 @@ class MispHandler:
         self.log.info(f'Getting JA3 report for {ioc.ioc_value}')
         report = self.misp.get("misp").search_ja3(ioc.ioc_value)
 
-        if self.mod_config.get('misp_report_as_attribute') is True:
-            self.log.info('Adding new attribute MISP JA3 Report to IOC')
-
-            status = self.gen_domain_report_from_template(
-                html_template=self.mod_config.get('misp_ja3_report_template'),
-                misp_report=report)
-
-            if not status.is_success():
-                return status
-
-            rendered_report = status.get_data()
-
-            try:
-                add_tab_attribute_field(ioc, tab_name='MISP Report', field_name="HTML report", field_type="html",
-                                        field_value=rendered_report)
-
-            except Exception:
-
-                self.log.error(traceback.format_exc())
-                return InterfaceStatus.I2Error(traceback.format_exc())
-        else:
-            self.log.info('Skipped adding attribute report. Option disabled')
-
-        return InterfaceStatus.I2Success()
+        return self._handle_misp_report(ioc, report, self.mod_config.get('misp_ja3_report_template'))
