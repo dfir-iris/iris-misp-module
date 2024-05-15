@@ -20,7 +20,7 @@
 module_name = "IrisMISP"
 module_description = "Provides an interface between MISP and IRIS"
 interface_version = "1.2.0"
-module_version = "1.3.0"
+module_version = "1.4.0"
 pipeline_support = False
 pipeline_info = {}
 
