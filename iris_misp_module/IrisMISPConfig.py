@@ -20,7 +20,7 @@
 module_name = "IrisMISP"
 module_description = "Provides an interface between MISP and IRIS"
 interface_version = "1.2.0"
-module_version = "1.4.0"
+module_version = "1.5.0"
 pipeline_support = False
 pipeline_info = {}
 
@@ -60,6 +60,18 @@ module_configuration = [
         "param_human_name": "Add MISP report as new IOC attribute",
         "param_description": "Creates a new attribute on the IOC, base on the MISP report. Attributes are based "
                              "on the templates of this configuration",
+        "default": True,
+        "mandatory": True,
+        "type": "bool",
+        "section": "Insights"
+    },
+    {
+        "param_name": "misp_populate_enrichment",
+        "param_human_name": "Populate native IOC enrichment",
+        "param_description": "Populates the IRIS 3 native IOC enrichment panel with a summary of the MISP results: "
+                             "match status, matching events, threat level, tags and classifications. Enrichment "
+                             "written by other modules is kept. The MISP Report attribute is not affected by this "
+                             "option",
         "default": True,
         "mandatory": True,
         "type": "bool",

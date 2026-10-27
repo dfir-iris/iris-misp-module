@@ -25,6 +25,9 @@ from app.datamgmt.manage.manage_attribute_db import add_tab_attribute_field
 from iris_interface import IrisInterfaceStatus
 from jinja2 import Template
 
+from iris_misp_module.misp_handler.enrichment import misp_build_enrichment
+from iris_misp_module.misp_handler.enrichment import misp_merge_enrichment
+from iris_misp_module.misp_handler.enrichment import misp_merge_reports
 from iris_misp_module.misp_handler.mispclient import MISPClient, MISPClientError
 
 
@@ -39,10 +42,15 @@ class MispHandler:
     def _load_misp_config(self):
         try:
             misp_config = json.loads(self.mod_config.get('misp_config'))
-            return misp_config
         except json.JSONDecodeError as e:
             self.log.error(f"Error parsing MISP configuration: {e}")
             return None
+
+        if not isinstance(misp_config, dict):
+            self.log.error("Error parsing MISP configuration: a JSON object is expected")
+            return None
+
+        return misp_config
 
     def load_misp_instance(self):
         """
@@ -87,15 +95,15 @@ class MispHandler:
         :param misp_report: The JSON report fetched with MISP API
         :return: IrisInterfaceStatus
         """
-        template = Template(html_template)
-        context = misp_report
-        pre_render = dict({"results": []})
-
-        # misp_results == dict({"name", "results", "url"})
-        for misp_result in context:
-            pre_render["results"].append(misp_result)
-
         try:
+            template = Template(html_template)
+            context = misp_report
+            pre_render = dict({"results": []})
+
+            # misp_results == dict({"name", "results", "url"})
+            for misp_result in context:
+                pre_render["results"].append(misp_result)
+
             rendered = template.render(pre_render)
 
         except Exception:
@@ -105,10 +113,59 @@ class MispHandler:
 
         return IrisInterfaceStatus.I2Success(data=rendered)
 
-    def _handle_misp_report(self, ioc, report, html_report_template):
+    def _populate_enrichment_enabled(self):
         """
-        Handle the MISP report response, adds the report as attribute and attaches a tag on hit
+        Returns whether the native IOC enrichment should be populated.
+        The option defaults to True so that existing configurations get the
+        enrichment panel populated without manual reconfiguration.
         """
+        configured = self.mod_config.get('misp_populate_enrichment')
+        if configured is None:
+            return True
+
+        return bool(configured)
+
+    def _populate_native_enrichment(self, ioc, report):
+        """
+        Maps the MISP results into the IOC native enrichment payload, keeping
+        the enrichment data written by other modules.
+
+        :param ioc: IOC instance
+        :param report: The JSON report fetched with the MISP API
+        """
+        if not self._populate_enrichment_enabled():
+            self.log.info('Skipped adding native IOC enrichment. Option disabled')
+            return
+
+        existing_enrichment = getattr(ioc, 'ioc_enrichment', None)
+        if existing_enrichment is not None and not isinstance(existing_enrichment, dict):
+            self.log.warning('Existing IOC enrichment is not a JSON object, it will be replaced by the MISP enrichment')
+
+        try:
+            ioc.ioc_enrichment = misp_merge_enrichment(
+                existing_enrichment,
+                misp_build_enrichment(report))
+
+        except Exception:
+            self.log.error(traceback.format_exc())
+
+    def _handle_misp_report(self, ioc, report, html_report_template, populate_enrichment=True):
+        """
+        Handle the MISP report response, adds the native enrichment, the
+        report as attribute and attaches a tag on hit
+
+        :param ioc: IOC instance
+        :param report: The JSON report fetched with the MISP API
+        :param html_report_template: Jinja2 template of the HTML report
+        :param populate_enrichment: Set to False when the caller already built
+            the native enrichment from several reports
+        """
+
+        if not isinstance(report, list):
+            report = []
+
+        if populate_enrichment:
+            self._populate_native_enrichment(ioc, report)
 
         if self.mod_config.get('misp_report_as_attribute') is True:
             self.log.info('Adding new attribute MISP Report to IOC')
@@ -192,13 +249,22 @@ class MispHandler:
         self.log.info(f'Getting domain|ip report for {ioc.ioc_value}')
         domain, ip = ioc.ioc_value.split('|')
         domain_report = self.misp.get("misp").search_domain(domain)
-        ip_report = self.misp.get("misp").search_domain(ip)
+        ip_report = self.misp.get("misp").search_ip(ip)
 
-        domain_result = self._handle_misp_report(ioc, domain_report, self.mod_config.get('misp_domain_report_template'))
+        # Both searches hit the same instances: build the native enrichment
+        # from the two reports together, otherwise the IP report would erase
+        # the domain hits from the enrichment panel.
+        self._populate_native_enrichment(ioc, misp_merge_reports([domain_report, ip_report]))
+
+        domain_result = self._handle_misp_report(ioc, domain_report,
+                                                 self.mod_config.get('misp_domain_report_template'),
+                                                 populate_enrichment=False)
         if not domain_result.is_success():
             return domain_result
 
-        ip_result = self._handle_misp_report(ioc, ip_report, self.mod_config.get('misp_ip_report_template'))
+        ip_result = self._handle_misp_report(ioc, ip_report,
+                                             self.mod_config.get('misp_ip_report_template'),
+                                             populate_enrichment=False)
 
         return ip_result
 
